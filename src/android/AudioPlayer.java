@@ -31,8 +31,12 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.InputStream;
 import java.io.FileInputStream;
+import java.io.BufferedInputStream;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.io.FileOutputStream;
 
 /**
  * This class implements the audio playback and recording capabilities used by Cordova.
@@ -81,7 +85,7 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
     private float duration = -1;            // Duration of audio
 
     private MediaRecorder recorder = null;  // Audio recording object
-    private String tempFile = null;         // Temporary recording file name
+    private File tempFile = null;         // Temporary recording file name
 
     private MediaPlayer player = null;      // Audio player object
     private boolean prepareOnly = true;     // playback after file prepare flag
@@ -98,13 +102,6 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
         this.id = id;
         this.audioFile = file;
         this.recorder = new MediaRecorder();
-
-        if (Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)) {
-            this.tempFile = Environment.getExternalStorageDirectory().getAbsolutePath() + "/tmprecording.3gp";
-        } else {
-            this.tempFile = "/data/data/" + handler.cordova.getActivity().getPackageName() + "/cache/tmprecording.3gp";
-        }
-
     }
 
     /**
@@ -139,12 +136,13 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
             sendErrorStatus(MEDIA_ERR_ABORTED);
             break;
         case NONE:
-            this.audioFile = file;
-            this.recorder.setAudioSource(MediaRecorder.AudioSource.MIC);
-            this.recorder.setOutputFormat(MediaRecorder.OutputFormat.DEFAULT); // THREE_GPP);
-            this.recorder.setAudioEncoder(MediaRecorder.AudioEncoder.DEFAULT); //AMR_NB);
-            this.recorder.setOutputFile(this.tempFile);
             try {
+                this.tempFile = File.createTempFile("tmprecording", "3gp");
+                this.audioFile = file;
+                this.recorder.setAudioSource(MediaRecorder.AudioSource.MIC);
+                this.recorder.setOutputFormat(MediaRecorder.OutputFormat.DEFAULT); // THREE_GPP);
+                this.recorder.setAudioEncoder(MediaRecorder.AudioEncoder.DEFAULT); //AMR_NB);
+                this.recorder.setOutputFile(this.tempFile.getPath());
                 this.recorder.prepare();
                 this.recorder.start();
                 this.setState(STATE.MEDIA_RUNNING);
@@ -169,20 +167,39 @@ public class AudioPlayer implements OnCompletionListener, OnPreparedListener, On
      * @param file
      */
     public void moveFile(String file) {
-        /* this is a hack to save the file as the specified name */
-        File f = new File(this.tempFile);
-
-        if (!file.startsWith("/")) {
-            if (Environment.getExternalStorageState().equals(Environment.MEDIA_MOUNTED)) {
-                file = Environment.getExternalStorageDirectory().getAbsolutePath() + File.separator + file;
-            } else {
-                file = "/data/data/" + handler.cordova.getActivity().getPackageName() + "/cache/" + file;
-            }
-        }
-
         String logMsg = "renaming " + this.tempFile + " to " + file;
         Log.d(LOG_TAG, logMsg);
-        if (!f.renameTo(new File(file))) Log.e(LOG_TAG, "FAILED " + logMsg);
+
+        InputStream in = null;
+        OutputStream out = null;
+        try {
+            out = new FileOutputStream(file);
+            in = new BufferedInputStream(new FileInputStream(this.tempFile));
+            byte[] buffer = new byte[1024];
+            int read;
+            while((read = in.read(buffer)) != -1){
+                out.write(buffer, 0, read);
+            }
+        } catch (Exception e) {
+            Log.e(LOG_TAG, "FAILED " + logMsg, e);
+        } finally {
+            try {
+                if (in != null) {
+                    in.close();
+                    in = null;
+                }
+            } catch (IOException e) {
+            }
+            this.tempFile.delete();
+            try {
+                if (out != null) {
+                    out.flush();
+                    out.close();
+                    out = null;
+                }
+            } catch (IOException e) {
+            }
+        }
     }
 
     /**
