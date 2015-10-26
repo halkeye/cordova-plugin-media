@@ -27,6 +27,8 @@ import android.media.AudioManager;
 import android.net.Uri;
 import android.util.Log;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 
 import org.apache.cordova.PluginResult;
@@ -84,7 +86,12 @@ public class AudioHandler extends CordovaPlugin {
             } catch (IllegalArgumentException e) {
                 fileUriStr = target;
             }
-            this.startRecordingAudio(args.getString(0), FileHelper.stripFileProtocol(fileUriStr));
+            try {
+                this.startRecordingAudio(args.getString(0), FileHelper.stripFileProtocol(fileUriStr));
+            } catch (IOException e) {
+                status = PluginResult.Status.ERROR;
+                result = e.getLocalizedMessage();
+            }
         }
         else if (action.equals("stopRecordingAudio")) {
             this.stopRecordingAudio(args.getString(0));
@@ -241,8 +248,9 @@ public class AudioHandler extends CordovaPlugin {
      * @param id				The id of the audio player
      * @param file				The name of the file
      */
-    public void startRecordingAudio(String id, String file) {
+    public void startRecordingAudio(String id, String file) throws IOException {
         AudioPlayer audio = getOrCreatePlayer(id, file);
+        audio.setTempFile(File.createTempFile("prefix", ".3gp", new File(new File(file).getParent())));
         audio.startRecording(file);
     }
 
